@@ -1,0 +1,6 @@
+build/
+*.bit
+*.svf
+*.json
+*.vcd
+*.out
