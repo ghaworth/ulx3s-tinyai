@@ -18,6 +18,7 @@ module sdram_init #(
 	localparam tRAS_CYCLES = (64'd1 * tRAS_NS  * CLK_FREQ_HZ + 999_999_999) / 1_000_000_000;
 	localparam tRCD_CYCLES = (64'd1 * tRCD_NS  * CLK_FREQ_HZ + 999_999_999) / 1_000_000_000;
 	localparam POWERUP_PAUSE_CYCLES = (64'd1 * POWERUP_PAUSE_NS  * CLK_FREQ_HZ + 999_999_999) / 1_000_000_000;
+	localparam tRSC_CYCLES = 2;   // Winbond -6, §9.5, mode register set, 2 tCK
 
 	localparam POWERUP   = 5'b00001;
 	localparam PRECHARGE = 5'b00010;
@@ -27,6 +28,7 @@ module sdram_init #(
 
 	reg [4:0] state;
 	reg [$clog2(POWERUP_PAUSE_CYCLES)-1 : 0] wait_counter;
+	reg [$clog2(AUTO_REFRESH_COUNT+1)-1 : 0] refresh_counter;
 
 	always @(posedge clk) begin
 		if (rst) begin
@@ -41,23 +43,41 @@ module sdram_init #(
 					wait_counter <= tRP_CYCLES;   // arm PRECHARGE's wait
 				end else begin
 					wait_counter <= wait_counter - 1;
-				end
+					end
 				end
 
 			PRECHARGE: begin
-
+				if (wait_counter == 0) begin
+					state <= REFRESH;
+					wait_counter <= tRC_CYCLES;   // arm REFRESH's wait
+					refresh_counter <= AUTO_REFRESH_COUNT;
+				end else begin
+					wait_counter <= wait_counter - 1;
+					end
 				end
 
 			REFRESH: begin
-
+				if (wait_counter != 0) begin
+					wait_counter <= wait_counter - 1;
+				end else if (refresh_counter != 0) begin
+					wait_counter <= tRC_CYCLES;
+					refresh_counter <= refresh_counter - 1;
+				end else begin
+					state <= MODE_REG;
+					wait_counter <= tRSC_CYCLES;
+					end
 				end
 
 			MODE_REG: begin
-
-				end
-
+				if (wait_counter != 0) begin
+					wait_counter <= wait_counter - 1;
+				end else begin 
+					state <= DONE;
+					end 
+				end 
+				
 			DONE: begin
-
+				done <= 1;
 				end
 			endcase
 		end
